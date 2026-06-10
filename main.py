@@ -1,116 +1,63 @@
 import os
 import datetime
-import feedparser
 import yfinance as yf
-import requests
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import smtplib
+from email.mime.text import MIMEText
 import traceback
 
-# ================== 配置 ==================
 EMAIL_USER = os.getenv('EMAIL_USER')
 EMAIL_PASS = os.getenv('EMAIL_PASS')
-XAI_API_KEY = os.getenv('XAI_API_KEY')   # 可选，先不填也行
 
-MAJOR_STOCKS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'GOOGL', 'META', 'AMD']
-GLOBAL_TICKERS = ['^IXIC', '^GSPC', '^VIX', 'NQ=F', 'ES=F', 'DX=F']
-
-def safe_download(tickers, **kwargs):
+def get_data():
     try:
-        data = yf.download(tickers=tickers, period='1d', interval='1m', progress=False, timeout=20)
+        stocks = ['NVDA', 'AMD', 'MSFT', 'AAPL', 'TSLA']
+        data = {}
+        for s in stocks:
+            ticker = yf.Ticker(s)
+            hist = ticker.history(period="1d")
+            if not hist.empty:
+                change = (hist['Close'].iloc[-1] - hist['Open'].iloc[-1]) / hist['Open'].iloc[-1]
+                data[s] = change
+            else:
+                data[s] = 0
         return data
     except Exception as e:
-        print(f"yfinance 错误: {e}")
-        return None
+        print(f"数据获取错误: {e}")
+        return {"NVDA": 0, "AMD": 0, "MSFT": 0}
 
-def get_market_data():
-    data = {}
+def send_email(report):
     try:
-        tickers = safe_download(GLOBAL_TICKERS)
-        if tickers is not None and not tickers.empty:
-            latest = tickers['Close'].iloc[-1]
-            data = {
-                '纳指': f"{latest.get('^IXIC', 'N/A'):.2f}",
-                '标普500': f"{latest.get('^GSPC', 'N/A'):.2f}",
-                'VIX': f"{latest.get('^VIX', 'N/A'):.2f}",
-                '纳指期货': f"{latest.get('NQ=F', 'N/A'):.2f}",
-                '标普期货': f"{latest.get('ES=F', 'N/A'):.2f}",
-                '美元指数': f"{latest.get('DX=F', 'N/A'):.2f}",
-            }
-    except:
-        data['市场数据'] = "获取部分失败（美股休市时正常）"
-    
-    # 股票
-    try:
-        stocks = safe_download(MAJOR_STOCKS)
-        if stocks is not None:
-            data['主要股票'] = {s: f"{stocks['Close'][s].iloc[-1]:.2f}" for s in MAJOR_STOCKS}
-    except:
-        data['主要股票'] = "股票数据获取失败"
-    
-    return data
+        msg = MIMEText(report, "plain", "utf-8")
+        msg["Subject"] = f"📊 美股盘前报告 - {datetime.date.today()}"
+        msg["From"] = EMAIL_USER
+        msg["To"] = EMAIL_USER
 
-def get_news():
-    news = []
-    for url in ['https://feeds.reuters.com/reuters/businessNews', 'https://feeds.reuters.com/reuters/marketsNews']:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:6]:
-                news.append(entry.title)
-        except:
-            pass
-    return news or ["暂无最新新闻"]
-
-def ai_analyze(market_data, news):
-    if not XAI_API_KEY:
-        return "AI判断：中性偏多（Grok API未配置）。建议观察期货走势。"
-    
-    # 这里是简化版AI，后面可换成Grok
-    return "Grok AI 已准备好，当前为简化模式。"
-
-def send_email(subject, body):
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_USER
-        msg['To'] = EMAIL_USER
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-
-        server = smtplib.SMTP_SSL('smtp.qq.com', 465)
+        server = smtplib.SMTP_SSL("smtp.qq.com", 465)
         server.login(EMAIL_USER, EMAIL_PASS)
         server.sendmail(EMAIL_USER, EMAIL_USER, msg.as_string())
         server.quit()
         print("✅ 邮件发送成功")
-        return True
     except Exception as e:
         print(f"❌ 邮件失败: {e}")
-        return False
+        traceback.print_exc()
 
 def main():
     print(f"🚀 开始执行 - {datetime.datetime.now()}")
-    try:
-        market = get_market_data()
-        news = get_news()
-        analysis = ai_analyze(market, news)
-        
-        report = f"""
-每日美股AI前瞻报告 - {datetime.date.today()}
+    data = get_data()
+    
+    report = f"""
+📊 今日美股盘前简报 - {datetime.date.today()}
 
-=== 市场快照 ===
-{market}
+NVDA: {data.get('NVDA', 0):.2%}
+AMD: {data.get('AMD', 0):.2%}
+MSFT: {data.get('MSFT', 0):.2%}
+AAPL: {data.get('AAPL', 0):.2%}
+TSLA: {data.get('TSLA', 0):.2%}
 
-=== 最新Reuters新闻 ===
-{chr(10).join(['• ' + n for n in news])}
-
-=== AI分析建议 ===
-{analysis}
-        """
-        send_email(f"每日美股报告 - {datetime.date.today()}", report)
-        print("✅ 工作流完成")
-    except Exception as e:
-        print(f"❌ 执行异常: {e}")
-        traceback.print_exc()
+整体倾向：观察期货与VIX后再决定
+    """
+    send_email(report)
+    print("✅ 执行完成")
 
 if __name__ == "__main__":
     main()
