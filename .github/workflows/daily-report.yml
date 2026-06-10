@@ -1,8 +1,8 @@
-name: 每日美股报告
+name: 每日美股AI报告
 
 on:
   schedule:
-    - cron: '50 6 * * *'   # 北京时间 14:50
+    - cron: '50 6 * * *'
   workflow_dispatch:
 
 jobs:
@@ -18,11 +18,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: pip install -r requirements.txt
+      - name: 安装依赖
+        run: pip install -r requirements.txt
 
-      - name: 运行每日报告
+      - name: 运行主程序
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: python main.py
