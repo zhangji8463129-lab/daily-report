@@ -1,63 +1,52 @@
 import os
 import datetime
-import yfinance as yf
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import traceback
 
+# 配置
 EMAIL_USER = os.getenv('EMAIL_USER')
 EMAIL_PASS = os.getenv('EMAIL_PASS')
 
-def get_data():
+def send_email(subject, body):
+    if not EMAIL_USER or not EMAIL_PASS:
+        print("❌ Secrets 未设置：EMAIL_USER 或 EMAIL_PASS")
+        return False
     try:
-        stocks = ['NVDA', 'AMD', 'MSFT', 'AAPL', 'TSLA']
-        data = {}
-        for s in stocks:
-            ticker = yf.Ticker(s)
-            hist = ticker.history(period="1d")
-            if not hist.empty:
-                change = (hist['Close'].iloc[-1] - hist['Open'].iloc[-1]) / hist['Open'].iloc[-1]
-                data[s] = change
-            else:
-                data[s] = 0
-        return data
-    except Exception as e:
-        print(f"数据获取错误: {e}")
-        return {"NVDA": 0, "AMD": 0, "MSFT": 0}
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_USER
+        msg['To'] = EMAIL_USER
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
 
-def send_email(report):
-    try:
-        msg = MIMEText(report, "plain", "utf-8")
-        msg["Subject"] = f"📊 美股盘前报告 - {datetime.date.today()}"
-        msg["From"] = EMAIL_USER
-        msg["To"] = EMAIL_USER
-
-        server = smtplib.SMTP_SSL("smtp.qq.com", 465)
+        server = smtplib.SMTP_SSL('smtp.qq.com', 465)
         server.login(EMAIL_USER, EMAIL_PASS)
         server.sendmail(EMAIL_USER, EMAIL_USER, msg.as_string())
         server.quit()
-        print("✅ 邮件发送成功")
+        print("✅ 邮件发送成功！")
+        return True
     except Exception as e:
-        print(f"❌ 邮件失败: {e}")
+        print(f"❌ 邮件发送失败: {e}")
         traceback.print_exc()
+        return False
 
 def main():
-    print(f"🚀 开始执行 - {datetime.datetime.now()}")
-    data = get_data()
-    
-    report = f"""
-📊 今日美股盘前简报 - {datetime.date.today()}
+    print(f"🚀 开始执行测试 - {datetime.datetime.now()}")
+    try:
+        report = f"""
+测试报告 - {datetime.date.today()}
 
-NVDA: {data.get('NVDA', 0):.2%}
-AMD: {data.get('AMD', 0):.2%}
-MSFT: {data.get('MSFT', 0):.2%}
-AAPL: {data.get('AAPL', 0):.2%}
-TSLA: {data.get('TSLA', 0):.2%}
+这是简化测试版本。
+如果您收到这封邮件，说明基本框架正常。
 
-整体倾向：观察期货与VIX后再决定
-    """
-    send_email(report)
-    print("✅ 执行完成")
+后续将逐步加入市场数据和AI分析。
+"""
+        send_email(f"美股报告测试 - {datetime.date.today()}", report)
+        print("✅ 测试完成")
+    except Exception as e:
+        print(f"❌ 严重错误: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
